@@ -6,18 +6,18 @@ import "../src/EventMarket.sol";
 import "../src/EventSettlementEngine.sol";
 
 contract EventMarketTest is Test {
-    EventMarket          public em;
+    EventMarket public em;
     EventSettlementEngine public ese;
 
     address public creWallet = makeAddr("cre");
-    address public alice     = makeAddr("alice");
-    address public bob       = makeAddr("bob");
+    address public alice = makeAddr("alice");
+    address public bob = makeAddr("bob");
 
-    string  public constant QUESTION = "Will ETH 24h Binance volume exceed $1B on expiry?";
+    string public constant QUESTION = "Will ETH 24h Binance volume exceed $1B on expiry?";
     uint256 public expiry;
 
     function _deploy() internal {
-        em  = new EventMarket(address(this));
+        em = new EventMarket(address(this));
         ese = new EventSettlementEngine(address(em), creWallet);
         em.updateSettlementEngine(address(ese));
         expiry = block.timestamp + 1 hours;
@@ -26,7 +26,7 @@ contract EventMarketTest is Test {
     function _setupMarketWithPositions() internal returns (uint256 id) {
         id = em.createMarket(QUESTION, expiry);
         vm.deal(alice, 1 ether);
-        vm.deal(bob,   1 ether);
+        vm.deal(bob, 1 ether);
         vm.prank(alice);
         em.takePosition{value: 1 ether}(id, EventMarket.Side.YES);
         vm.prank(bob);
@@ -34,7 +34,9 @@ contract EventMarketTest is Test {
         vm.warp(expiry + 1);
     }
 
-    function setUp() public { _deploy(); }
+    function setUp() public {
+        _deploy();
+    }
 
     // ── Creation ─────────────────────────────────────────────────────
 
@@ -146,7 +148,7 @@ contract EventMarketTest is Test {
         ese.executeSettlement(id, 3); // INVALID
 
         uint256 aliceBefore = alice.balance;
-        uint256 bobBefore   = bob.balance;
+        uint256 bobBefore = bob.balance;
 
         vm.prank(alice);
         em.claimRefund(id);
@@ -154,7 +156,7 @@ contract EventMarketTest is Test {
         em.claimRefund(id);
 
         assertEq(alice.balance - aliceBefore, 1 ether);
-        assertEq(bob.balance   - bobBefore,   1 ether);
+        assertEq(bob.balance - bobBefore, 1 ether);
     }
 
     function test_refund_rejectsDoubleRefund() public {

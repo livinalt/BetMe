@@ -8,12 +8,12 @@ import "../src/EventSettlementEngine.sol";
 contract DeployEvent is Script {
     function run() external {
         uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
-        address creForwarder       = vm.envAddress("CRE_FORWARDER_ADDRESS");
+        address creForwarder = vm.envAddress("CRE_FORWARDER_ADDRESS");
 
         vm.startBroadcast(deployerPrivateKey);
 
         address deployer = vm.addr(deployerPrivateKey);
-        EventMarket em   = new EventMarket(deployer);
+        EventMarket em = new EventMarket(deployer);
         console.log("EventMarket deployed at:", address(em));
 
         EventSettlementEngine ese = new EventSettlementEngine(address(em), creForwarder);

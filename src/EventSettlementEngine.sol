@@ -2,7 +2,12 @@
 pragma solidity ^0.8.24;
 
 interface IEventMarket {
-    enum Outcome { UNRESOLVED, YES, NO, INVALID }
+    enum Outcome {
+        UNRESOLVED,
+        YES,
+        NO,
+        INVALID
+    }
     function settle(uint256 marketId, Outcome outcome) external;
 }
 
@@ -17,8 +22,8 @@ contract EventSettlementEngine {
     event ForwarderUpdated(address oldForwarder, address newForwarder);
 
     constructor(address _market, address _creForwarder) {
-        owner       = msg.sender;
-        market      = IEventMarket(_market);
+        owner = msg.sender;
+        market = IEventMarket(_market);
         creForwarder = _creForwarder;
     }
 
@@ -35,8 +40,11 @@ contract EventSettlementEngine {
     // outcome: 1=YES, 2=NO, 3=INVALID
     function executeSettlement(
         uint256 marketId,
-        uint8   outcome    // matches IEventMarket.Outcome enum
-    ) external onlyCRE {
+        uint8 outcome // matches IEventMarket.Outcome enum
+    )
+        external
+        onlyCRE
+    {
         require(outcome >= 1 && outcome <= 3, "invalid outcome value");
         bytes32 payloadHash = keccak256(abi.encode(marketId, outcome));
         require(!usedPayloads[payloadHash], "already settled");

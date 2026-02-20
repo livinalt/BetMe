@@ -2,16 +2,24 @@
 pragma solidity ^0.8.24;
 
 contract EventMarket {
-    enum Outcome { UNRESOLVED, YES, NO, INVALID }
-    enum Side { YES, NO }
+    enum Outcome {
+        UNRESOLVED,
+        YES,
+        NO,
+        INVALID
+    }
+    enum Side {
+        YES,
+        NO
+    }
 
     struct Market {
-        bytes32  questionId;    // keccak256(questionText)
-        string   questionText;  // human-readable, immutable
-        uint256  expiry;
-        uint256  totalYes;
-        uint256  totalNo;
-        Outcome  outcome;
+        bytes32 questionId; // keccak256(questionText)
+        string questionText; // human-readable, immutable
+        uint256 expiry;
+        uint256 totalYes;
+        uint256 totalNo;
+        Outcome outcome;
     }
 
     mapping(uint256 => Market) public markets;
@@ -36,21 +44,18 @@ contract EventMarket {
         _;
     }
 
-    function createMarket(
-        string calldata questionText,
-        uint256 expiry
-    ) external returns (uint256 id) {
+    function createMarket(string calldata questionText, uint256 expiry) external returns (uint256 id) {
         require(expiry > block.timestamp, "bad expiry");
         require(bytes(questionText).length > 0, "empty question");
         bytes32 questionId = keccak256(abi.encodePacked(questionText));
         id = nextMarketId++;
         markets[id] = Market({
-            questionId:   questionId,
+            questionId: questionId,
             questionText: questionText,
-            expiry:       expiry,
-            totalYes:     0,
-            totalNo:      0,
-            outcome:      Outcome.UNRESOLVED
+            expiry: expiry,
+            totalYes: 0,
+            totalNo: 0,
+            outcome: Outcome.UNRESOLVED
         });
         emit MarketCreated(id, questionId, questionText, expiry);
     }
@@ -85,7 +90,7 @@ contract EventMarket {
         require(userStake > 0, "nothing to claim");
 
         positions[marketId][msg.sender][winningSide] = 0;
-        uint256 totalPool  = m.totalYes + m.totalNo;
+        uint256 totalPool = m.totalYes + m.totalNo;
         uint256 winnerPool = winningSide == Side.YES ? m.totalYes : m.totalNo;
         require(winnerPool > 0, "empty winner pool");
         uint256 payout = (userStake * totalPool) / winnerPool;
@@ -102,13 +107,13 @@ contract EventMarket {
         require(!refundClaimed[marketId][msg.sender], "already refunded");
 
         uint256 yesStake = positions[marketId][msg.sender][Side.YES];
-        uint256 noStake  = positions[marketId][msg.sender][Side.NO];
-        uint256 total    = yesStake + noStake;
+        uint256 noStake = positions[marketId][msg.sender][Side.NO];
+        uint256 total = yesStake + noStake;
         require(total > 0, "nothing to refund");
 
         refundClaimed[marketId][msg.sender] = true;
         positions[marketId][msg.sender][Side.YES] = 0;
-        positions[marketId][msg.sender][Side.NO]  = 0;
+        positions[marketId][msg.sender][Side.NO] = 0;
 
         (bool success,) = payable(msg.sender).call{value: total}("");
         require(success, "refund failed");
