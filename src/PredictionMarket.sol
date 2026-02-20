@@ -70,6 +70,7 @@ contract PredictionMarket {
         positions[marketId][msg.sender][winner] = 0;
         uint256 totalPool = m.totalAbove + m.totalBelow;
         uint256 winnerPool = winner == Side.ABOVE ? m.totalAbove : m.totalBelow;
+        require(winnerPool > 0, "empty winner pool");
         uint256 payout = (userStake * totalPool) / winnerPool;
         (bool success, ) = payable(msg.sender).call{value: payout}(""); require(success, "transfer failed");
     }

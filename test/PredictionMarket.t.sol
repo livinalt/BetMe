@@ -52,7 +52,7 @@ contract PredictionMarketTest is Test {
         (uint256 strike, uint256 exp,,,, PredictionMarket.State state) = pm.markets(0);
         assertEq(strike, STRIKE);
         assertEq(exp, expiry);
-        assertEq(uint(state), uint(PredictionMarket.State.OPEN));
+        assertEq(uint256(state), uint256(PredictionMarket.State.OPEN));
     }
 
     function test_createMarket_rejectsExpiredExpiry() public {
@@ -98,7 +98,7 @@ contract PredictionMarketTest is Test {
         se.executeSettlement(0, settledPrice);
         (,,,, uint256 sp, PredictionMarket.State state) = pm.markets(0);
         assertEq(sp, settledPrice);
-        assertEq(uint(state), uint(PredictionMarket.State.SETTLED));
+        assertEq(uint256(state), uint256(PredictionMarket.State.SETTLED));
     }
 
     function test_settlement_rejectsNonCRE() public {
