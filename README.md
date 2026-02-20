@@ -1,177 +1,293 @@
 # CRE-Powered Prediction Market Settlement Engine
 
-> Automated, verifiable ETH/USD prediction market settlement using Chainlink CRE on Base Sepolia.
+> Automated, verifiable market settlement using Chainlink CRE on Base Sepolia.
+> Supports both numeric price markets and real-world event markets.
 
 ## Overview
 
-This project demonstrates a minimal but production-aware prediction market where settlement is fully automated by Chainlink CRE — no admin keys, no manual intervention, no centralized oracle owner.
+This project demonstrates a two-system prediction market infrastructure where all settlement is automated by Chainlink CRE — no admin keys, no manual intervention, no centralized oracle owner.
 
-**The core flow:**
-1. A prediction market is created on-chain with a strike price and expiry
-2. Users take ABOVE or BELOW positions by depositing ETH
-3. At expiry, CRE automatically fetches ETH/USD from 3 independent sources, computes a tamper-resistant median, and submits a signed settlement transaction
-4. Winners claim their proportional share of the pool permissionlessly
+**System 1 — Price Markets:** Was ETH above $3000 at expiry?
+**System 2 — Event Markets:** Did a real-world event happen? (volume thresholds, football results, governance votes)
+
+Both systems share the same CRE orchestration pattern. Only the data source and aggregation method change per market type.
+
+---
 
 ## Architecture
 ```
-┌─────────────────────────────────────────────────────┐
-│                 CRE WORKFLOW                         │
-│                                                      │
-│  Trigger: cron every 5 min                          │
-│                                                      │
-│  ┌──────────┐  ┌──────────┐  ┌──────────┐          │
-│  │ Binance  │  │CoinGecko │  │ Gate.io  │  HTTP     │
-│  └────┬─────┘  └────┬─────┘  └────┬─────┘          │
-│       └─────────────┴──────────────┘                 │
-│                 Median Compute                        │
-│                 Sign + Submit TX                      │
-└─────────────────────┬───────────────────────────────┘
-                      │ executeSettlement()
-                      ▼
-┌─────────────────────────────────────────────────────┐
-│              Base Sepolia                            │
-│  PredictionMarket.sol ←── SettlementEngine.sol      │
-│  (positions, payouts)      (CRE forwarder, replay)  │
-└─────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│                     CHAINLINK CRE LAYER                          │
+│                                                                  │
+│   price-job-spec.toml            event-job-spec.toml            │
+│   ┌──────────────────┐           ┌──────────────────┐           │
+│   │ Binance  HTTP    │           │ API-Football HTTP │           │
+│   │ CoinGecko HTTP   │           │ Binance Vol HTTP  │           │
+│   │ Gate.io  HTTP    │           │ Gate.io  Vol HTTP │           │
+│   └────────┬─────────┘           └────────┬──────────┘          │
+│        Median                         Majority Vote              │
+│        (tamper-resistant)             (2 of 3 sources)          │
+│            │                               │                     │
+│       eth_tx task                     eth_tx task               │
+└────────────┼───────────────────────────────┼─────────────────────┘
+             │                               │
+             ▼                               ▼
+┌────────────────────────┐   ┌───────────────────────────┐
+│   SettlementEngine     │   │   EventSettlementEngine    │
+│   executeSettlement    │   │   executeSettlement        │
+│   (uint256 price)      │   │   (uint8 outcome)          │
+│   replay protection    │   │   replay protection        │
+└──────────┬─────────────┘   └─────────────┬──────────────┘
+           │                               │
+           ▼                               ▼
+┌────────────────────────┐   ┌───────────────────────────┐
+│   PredictionMarket     │   │   EventMarket              │
+│                        │   │                            │
+│   strike: $3000        │   │   question: string         │
+│   settled: uint256     │   │   outcome: YES/NO/INVALID  │
+│   payout: proportional │   │   payout: proportional     │
+│                        │   │   refund: if INVALID       │
+└────────────────────────┘   └───────────────────────────┘
 ```
 
-## Why Median Aggregation?
+---
 
-With 3 price sources, the median is the middle value after sorting. A single compromised or spiking source cannot shift the result — an attacker must corrupt at least 2 of 3 sources simultaneously.
-```
-Example:
-  Binance:   $1963
-  CoinGecko: $1963  ← median (correct)
-  Gate.io:   $9999  ← spike/attack ignored
+## Why Two Aggregation Methods?
 
-  Median: $1963  ✅
-  Mean:   $4641  ❌
+**Price markets → Median**
 ```
+Binance:   $1963
+CoinGecko: $1963  ← median (correct)
+Gate.io:   $9999  ← spike ignored
+
+Median: $1963  ✅
+Mean:   $4641  ❌
+```
+Median is manipulation-resistant — one bad source cannot move the result.
+
+**Event markets → Majority Vote**
+```
+Check 1 (score comparison): YES ✅
+Check 2 (API winner flag):  YES ✅
+Check 3 (score difference): NO  ❌
+
+Votes: 2/3 YES → Outcome: YES ✅
+```
+Majority vote handles yes/no questions across independent data evaluations.
+If any source is unreachable or the event is incomplete → INVALID → full refunds.
+
+---
 
 ## Deployed Contracts (Base Sepolia)
 
+### Price Market System
 | Contract | Address |
 |---|---|
 | PredictionMarket | `0xD8846806e200604428E6c40f6c3ed6B80c3a70DF` |
 | SettlementEngine | `0xA32d2AD94b9C1795d44385F16Bf5366131e0F362` |
 
-- [PredictionMarket on Basescan](https://sepolia.basescan.org/address/0xD8846806e200604428E6c40f6c3ed6B80c3a70DF)
-- [SettlementEngine on Basescan](https://sepolia.basescan.org/address/0xA32d2AD94b9C1795d44385F16Bf5366131e0F362)
+### Event Market System
+| Contract | Address |
+|---|---|
+| EventMarket | `0xE6B57AAfA330D6d51058Ddbfe2e16A2F60951a69` |
+| EventSettlementEngine | `0x1769eC29AE46BB2EC2CFB002e9E7b368d95E377E` |
+
+All four contracts verified on Basescan.
+
+---
+
+## Supported Event Types
+
+| Event | Data Source | Resolution | Status |
+|---|---|---|---|
+| ETH price vs strike | Binance, CoinGecko, Gate.io | Median | ✅ Live demo |
+| 24h volume threshold | Binance, CoinGecko, Gate.io | Majority vote | ✅ Live demo |
+| Football match result | API-Football | Majority vote | ✅ Live demo |
+| On-chain governance | cast call (blockchain read) | Majority vote | 🔧 Swap job spec |
+| Weather threshold | OpenWeatherMap | Majority vote | 🔧 Swap job spec |
+| Election result | AP Elections API | Majority vote | 🔧 Swap job spec |
+
+Adding a new event type requires zero contract changes — only the CRE job spec data sources change.
+
+---
 
 ## Smart Contract Design
 
 ### PredictionMarket.sol
-- Creates markets with a strike price and expiry timestamp
+- Creates markets with strike price and expiry timestamp
 - Accepts ETH positions on ABOVE or BELOW
-- Settles only when called by the authorized SettlementEngine
-- Pays winners proportionally from the total pool
-- Replay-safe: settled markets cannot be re-settled
+- Settles only via authorized SettlementEngine
+- Pays winners proportionally from total pool
 
 ### SettlementEngine.sol
-- Accepts settlement calls only from the CRE forwarder address
-- Payload replay protection via `keccak256(marketId, price)` mapping
-- Single entry point between CRE and the market contract
-- Owner can rotate the CRE forwarder address if needed
+- Accepts calls only from CRE forwarder address
+- Replay protection via `keccak256(marketId, price)` mapping
+- Single entry point between CRE and market contract
+
+### EventMarket.sol
+- Creates markets with arbitrary question string (immutable after creation)
+- Accepts ETH positions on YES or NO
+- Three outcomes: YES, NO, INVALID
+- INVALID triggers full refunds to all participants
+- Replay-safe: settled markets cannot be re-settled
+
+### EventSettlementEngine.sol
+- Accepts `uint8 outcome` (1=YES, 2=NO, 3=INVALID)
+- Same replay protection pattern as SettlementEngine
+- Owner can rotate CRE forwarder address
+
+---
 
 ## CRE Integration
 
-The CRE job spec is in `cre/job-spec.toml`. It defines:
+Two job specs in `cre/`:
 
-1. **Trigger** — cron every 5 minutes
-2. **check_expiry** — blockchain_read task reads on-chain market state; exits if not ready
-3. **fetch_binance / fetch_coingecko / fetch_gateio** — parallel HTTP tasks
-4. **compute_median** — built-in CRE median task, multiplies by 1e8 for on-chain decimals
-5. **submit_settlement** — eth_tx task calls `SettlementEngine.executeSettlement()`
+**`cre/job-spec.toml`** — Price market settlement
+1. `check_expiry` — blockchain_read, exits if not ready
+2. `fetch_binance/coingecko/gateio` — parallel HTTP tasks
+3. `compute_median` — built-in CRE median task, multiplies by 1e8
+4. `submit_settlement` — eth_tx to SettlementEngine
 
-## Known Simplifications vs Production
+**`cre/event-job-spec.toml`** — Event market settlement
+1. `check_expiry` — blockchain_read, exits if not ready
+2. `fetch_*_volume` — parallel HTTP tasks per source
+3. `eval_*` — compare tasks, return 0 or 1
+4. `majority_vote` — sum of evaluations
+5. `map_outcome` — conditional maps to 1/2/3
+6. `submit_settlement` — eth_tx to EventSettlementEngine
 
-| Simplification | Production Equivalent |
-|---|---|
-| CRE forwarder is a single EOA | DON threshold signature verification (EIP-712) |
-| Single market type (ETH/USD) | Generic market factory with any price feed |
-| Manual forwarder address allowlist | On-chain DON public key registry |
-| 3 HTTP sources | Chainlink Data Streams or additional DON sources |
-
-These are intentional scoping decisions, not oversights. The architecture is designed to make upgrading each layer straightforward.
+---
 
 ## Repository Structure
 ```
 cre-prediction-market/
 ├── src/
-│   ├── PredictionMarket.sol    # Core market logic
-│   └── SettlementEngine.sol    # CRE entry point + replay protection
+│   ├── PredictionMarket.sol       # Price market logic
+│   ├── SettlementEngine.sol       # CRE entry point for price markets
+│   ├── EventMarket.sol            # Event market logic + INVALID refund
+│   └── EventSettlementEngine.sol  # CRE entry point for event markets
 ├── test/
-│   └── PredictionMarket.t.sol  # 10 tests, full coverage
+│   ├── PredictionMarket.t.sol     # 10 tests
+│   └── EventMarket.t.sol          # 12 tests
 ├── script/
-│   ├── Deploy.s.sol            # Foundry deploy script
-│   └── demo.sh                 # End-to-end live demo
+│   ├── Deploy.s.sol               # Deploy price market system
+│   ├── DeployEvent.s.sol          # Deploy event market system
+│   └── demo.sh                    # Price market end-to-end demo
 ├── cre/
-│   ├── job-spec.toml           # CRE workflow definition
-│   └── simulate.sh             # Local CRE simulation
+│   ├── job-spec.toml              # CRE workflow — price markets
+│   ├── event-job-spec.toml        # CRE workflow — event markets
+│   ├── simulate.sh                # Price market simulation
+│   ├── event-simulate.sh          # Volume event simulation
+│   └── football-simulate.sh       # Football event simulation
 └── README.md
 ```
+
+---
 
 ## Quick Start
 ```bash
 # Install Foundry
 curl -L https://foundry.paradigm.xyz | bash && foundryup
 
-# Clone and install
+# Clone
 git clone https://github.com/YOUR_USERNAME/cre-prediction-market
 cd cre-prediction-market
 
-# Copy and fill environment
+# Environment
 cp .env.example .env
-# Edit .env with your PRIVATE_KEY, BASE_SEPOLIA_RPC, etc.
+# Fill in PRIVATE_KEY, BASE_SEPOLIA_RPC, ETHERSCAN_API_KEY,
+# CRE_FORWARDER_ADDRESS, FOOTBALL_API_KEY
 
-# Run tests
+# Test
 forge test -vv
 
-# Deploy
+# Deploy price market system
 forge script script/Deploy.s.sol:Deploy \
-  --rpc-url $BASE_SEPOLIA_RPC \
-  --private-key $PRIVATE_KEY \
-  --broadcast -vv
+  --rpc-url $BASE_SEPOLIA_RPC --private-key $PRIVATE_KEY --broadcast -vv
 
-# Run full demo
-bash script/demo.sh
-
-# Run CRE simulation only
-bash cre/simulate.sh
+# Deploy event market system
+forge script script/DeployEvent.s.sol:DeployEvent \
+  --rpc-url $BASE_SEPOLIA_RPC --private-key $PRIVATE_KEY --broadcast -vv
 ```
+
+---
 
 ## Demo Flow
-```
+```bash
+# Demo 1: Price market — ETH vs $3000 strike
 bash script/demo.sh
 
-  STEP 1: Create market (strike $3000, expiry 2min)
-  STEP 2: Take ABOVE + BELOW positions on-chain
-  STEP 3: Wait for expiry
-  STEP 4: CRE fetches 3 prices → median → settles on-chain
-  STEP 5: Final state verified, winner determined
+# Demo 2: Event market — ETH volume threshold
+bash cre/event-simulate.sh
+
+# Demo 3: Football event — match result + INVALID guard
+bash cre/football-simulate.sh
 ```
+
+**What each demo proves:**
+
+| Demo | Proves |
+|---|---|
+| `demo.sh` | Numeric median resolution, price feed aggregation |
+| `event-simulate.sh` | Yes/No majority vote, threshold evaluation |
+| `football-simulate.sh` | Real-world event data, INVALID safety guard |
+
+---
 
 ## Test Suite
 ```bash
 forge test -vv
 
-  [PASS] test_createMarket()
-  [PASS] test_createMarket_rejectsExpiredExpiry()
-  [PASS] test_takePosition_above()
-  [PASS] test_takePosition_below()
-  [PASS] test_takePosition_rejectsAfterExpiry()
-  [PASS] test_settlement_aboveWins()
-  [PASS] test_settlement_rejectsNonCRE()
-  [PASS] test_settlement_rejectsReplay()
-  [PASS] test_claim_winnerGetsFullPool()
-  [PASS] test_claim_rejectsLoser()
+# PredictionMarket — 10 tests
+[PASS] test_createMarket()
+[PASS] test_createMarket_rejectsExpiredExpiry()
+[PASS] test_takePosition_above()
+[PASS] test_takePosition_below()
+[PASS] test_takePosition_rejectsAfterExpiry()
+[PASS] test_settlement_aboveWins()
+[PASS] test_settlement_rejectsNonCRE()
+[PASS] test_settlement_rejectsReplay()
+[PASS] test_claim_winnerGetsFullPool()
+[PASS] test_claim_rejectsLoser()
+
+# EventMarket — 12 tests
+[PASS] test_createMarket()
+[PASS] test_createMarket_rejectsBadExpiry()
+[PASS] test_createMarket_rejectsEmptyQuestion()
+[PASS] test_takePosition_yes()
+[PASS] test_takePosition_rejectsAfterExpiry()
+[PASS] test_settlement_yes()
+[PASS] test_settlement_no()
+[PASS] test_settlement_invalid()
+[PASS] test_settlement_rejectsNonCRE()
+[PASS] test_settlement_rejectsReplay()
+[PASS] test_claim_yesWinner()
+[PASS] test_claim_rejectsLoser()
+[PASS] test_refund_onInvalid()
+[PASS] test_refund_rejectsDoubleRefund()
 ```
+
+---
+
+## Known Simplifications vs Production
+
+| Simplification | Production Equivalent |
+|---|---|
+| CRE forwarder is single EOA | DON threshold signature (EIP-712) |
+| Manual forwarder allowlist | On-chain DON public key registry |
+| Single market per deploy | Factory pattern for unlimited markets |
+| HTTP sources only | Chainlink Data Streams + HTTP mix |
+| No fee mechanism | Protocol fee on winning claims |
+
+---
 
 ## Judging Checklist
 
-- [x] Blockchain integration — Base Sepolia, live contracts
-- [x] External API via CRE — 3 independent price sources
-- [x] Automated settlement — CRE job spec triggers on expiry
-- [x] Simulation/deployment via CLI — `bash cre/simulate.sh`
+- [x] Blockchain integration — Base Sepolia, 4 live verified contracts
+- [x] External API via CRE — 3 independent sources per market type
+- [x] Automated settlement — 2 CRE job specs covering price + events
+- [x] CLI simulation — 3 runnable demo scripts
 - [x] Clean README + demo flow — this document
 - [x] Verifiable on-chain — all TXs on Basescan
+- [x] INVALID/refund safety — demonstrated via football demo
+- [x] 22 tests passing — full coverage of both systems
