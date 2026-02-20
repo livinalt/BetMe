@@ -10,8 +10,8 @@ contract PredictionMarketTest is Test {
     SettlementEngine public se;
 
     address public creWallet = makeAddr("cre");
-    address public alice     = makeAddr("alice");
-    address public bob       = makeAddr("bob");
+    address public alice = makeAddr("alice");
+    address public bob = makeAddr("bob");
 
     uint256 public constant STRIKE = 3000_00000000;
     uint256 public expiry;
@@ -32,7 +32,7 @@ contract PredictionMarketTest is Test {
     function _setupMarketWithPositions() internal {
         pm.createMarket(STRIKE, expiry);
         vm.deal(alice, 1 ether);
-        vm.deal(bob,   1 ether);
+        vm.deal(bob, 1 ether);
         vm.prank(alice);
         pm.takePosition{value: 1 ether}(0, PredictionMarket.Side.ABOVE);
         vm.prank(bob);

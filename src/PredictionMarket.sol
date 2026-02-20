@@ -2,8 +2,14 @@
 pragma solidity ^0.8.24;
 
 contract PredictionMarket {
-    enum Side { ABOVE, BELOW }
-    enum State { OPEN, SETTLED }
+    enum Side {
+        ABOVE,
+        BELOW
+    }
+    enum State {
+        OPEN,
+        SETTLED
+    }
 
     struct Market {
         uint256 strikePrice;
@@ -72,7 +78,8 @@ contract PredictionMarket {
         uint256 winnerPool = winner == Side.ABOVE ? m.totalAbove : m.totalBelow;
         require(winnerPool > 0, "empty winner pool");
         uint256 payout = (userStake * totalPool) / winnerPool;
-        (bool success, ) = payable(msg.sender).call{value: payout}(""); require(success, "transfer failed");
+        (bool success,) = payable(msg.sender).call{value: payout}("");
+        require(success, "transfer failed");
     }
 
     function updateSettlementEngine(address newEngine) external {
