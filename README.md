@@ -167,11 +167,4 @@ forge test -vv
   [PASS] test_claim_rejectsLoser()
 ```
 
-## Judging Checklist
 
-- [x] Blockchain integration — Base Sepolia, live contracts
-- [x] External API via CRE — 3 independent price sources
-- [x] Automated settlement — CRE job spec triggers on expiry
-- [x] Simulation/deployment via CLI — `bash cre/simulate.sh`
-- [x] Clean README + demo flow — this document
-- [x] Verifiable on-chain — all TXs on Basescan
