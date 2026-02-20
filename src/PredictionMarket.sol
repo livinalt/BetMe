@@ -71,7 +71,7 @@ contract PredictionMarket {
         uint256 totalPool = m.totalAbove + m.totalBelow;
         uint256 winnerPool = winner == Side.ABOVE ? m.totalAbove : m.totalBelow;
         uint256 payout = (userStake * totalPool) / winnerPool;
-        payable(msg.sender).transfer(payout);
+        (bool success, ) = payable(msg.sender).call{value: payout}(""); require(success, "transfer failed");
     }
 
     function updateSettlementEngine(address newEngine) external {

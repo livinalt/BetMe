@@ -9,23 +9,39 @@ contract PredictionMarketTest is Test {
     PredictionMarket public pm;
     SettlementEngine public se;
 
-    address public creWallet = address(0xCRE);
-    address public alice = address(0xA11CE);
-    address public bob = address(0xB0B);
+    address public creWallet = makeAddr("cre");
+    address public alice     = makeAddr("alice");
+    address public bob       = makeAddr("bob");
 
-    uint256 public constant STRIKE = 3000_00000000; // $3000 in 8 decimals
+    uint256 public constant STRIKE = 3000_00000000;
     uint256 public expiry;
 
-    function setUp() public {
-        // Deploy SettlementEngine with placeholder market address first
-        se = new SettlementEngine(address(0), creWallet);
-        // Deploy PredictionMarket pointing to SettlementEngine
-        pm = new PredictionMarket(address(se));
-        // Wire SettlementEngine to the real market
-        // (in deploy script we'll do this atomically)
-        vm.etch(address(se), address(se).code); // no-op, just showing awareness
+    // ── helpers ──────────────────────────────────────────────────────
 
+    function _deploy() internal {
+        // Step 1: deploy PM with a temp settler so constructor doesn't revert
+        pm = new PredictionMarket(address(this));
+        // Step 2: deploy SE pointing to the real PM
+        se = new SettlementEngine(address(pm), creWallet);
+        // Step 3: update PM to point to the real SE
+        pm.updateSettlementEngine(address(se));
+        // Reset expiry relative to current block
         expiry = block.timestamp + 1 hours;
+    }
+
+    function _setupMarketWithPositions() internal {
+        pm.createMarket(STRIKE, expiry);
+        vm.deal(alice, 1 ether);
+        vm.deal(bob,   1 ether);
+        vm.prank(alice);
+        pm.takePosition{value: 1 ether}(0, PredictionMarket.Side.ABOVE);
+        vm.prank(bob);
+        pm.takePosition{value: 1 ether}(0, PredictionMarket.Side.BELOW);
+        vm.warp(expiry + 1);
+    }
+
+    function setUp() public {
+        _deploy();
     }
 
     // ── Market creation ──────────────────────────────────────────────
@@ -75,31 +91,11 @@ contract PredictionMarketTest is Test {
 
     // ── Settlement ───────────────────────────────────────────────────
 
-    function _setupMarketWithPositions() internal {
-        pm.createMarket(STRIKE, expiry);
-        vm.deal(alice, 1 ether);
-        vm.deal(bob, 1 ether);
-        vm.prank(alice);
-        pm.takePosition{value: 1 ether}(0, PredictionMarket.Side.ABOVE);
-        vm.prank(bob);
-        pm.takePosition{value: 1 ether}(0, PredictionMarket.Side.BELOW);
-        vm.warp(expiry + 1);
-    }
-
     function test_settlement_aboveWins() public {
-        // Deploy fresh with correct wiring
-        se = new SettlementEngine(address(pm), creWallet);
-        pm = new PredictionMarket(address(se));
-        se = new SettlementEngine(address(pm), creWallet);
-        pm = new PredictionMarket(address(se));
-
-        expiry = block.timestamp + 1 hours;
         _setupMarketWithPositions();
-
-        uint256 settledPrice = 3500_00000000; // $3500 > $3000 strike → ABOVE wins
+        uint256 settledPrice = 3500_00000000;
         vm.prank(creWallet);
         se.executeSettlement(0, settledPrice);
-
         (,,,, uint256 sp, PredictionMarket.State state) = pm.markets(0);
         assertEq(sp, settledPrice);
         assertEq(uint(state), uint(PredictionMarket.State.SETTLED));
@@ -111,14 +107,7 @@ contract PredictionMarketTest is Test {
     }
 
     function test_settlement_rejectsReplay() public {
-        se = new SettlementEngine(address(pm), creWallet);
-        pm = new PredictionMarket(address(se));
-        se = new SettlementEngine(address(pm), creWallet);
-        pm = new PredictionMarket(address(se));
-
-        expiry = block.timestamp + 1 hours;
         _setupMarketWithPositions();
-
         vm.startPrank(creWallet);
         se.executeSettlement(0, 3500_00000000);
         vm.expectRevert("already settled");
@@ -129,19 +118,11 @@ contract PredictionMarketTest is Test {
     // ── Claim / Payout ───────────────────────────────────────────────
 
     function test_claim_winnerGetsFullPool() public {
-        se = new SettlementEngine(address(pm), creWallet);
-        pm = new PredictionMarket(address(se));
-        se = new SettlementEngine(address(pm), creWallet);
-        pm = new PredictionMarket(address(se));
-
-        expiry = block.timestamp + 1 hours;
         _setupMarketWithPositions();
-
         // Alice bet ABOVE 1 ETH, Bob bet BELOW 1 ETH
-        // Price settles above strike → Alice wins full pool (2 ETH)
+        // Price $3500 > $3000 strike → ABOVE wins → Alice gets 2 ETH
         vm.prank(creWallet);
         se.executeSettlement(0, 3500_00000000);
-
         uint256 aliceBefore = alice.balance;
         vm.prank(alice);
         pm.claim(0);
@@ -149,17 +130,9 @@ contract PredictionMarketTest is Test {
     }
 
     function test_claim_rejectsLoser() public {
-        se = new SettlementEngine(address(pm), creWallet);
-        pm = new PredictionMarket(address(se));
-        se = new SettlementEngine(address(pm), creWallet);
-        pm = new PredictionMarket(address(se));
-
-        expiry = block.timestamp + 1 hours;
         _setupMarketWithPositions();
-
         vm.prank(creWallet);
         se.executeSettlement(0, 3500_00000000);
-
         vm.prank(bob);
         vm.expectRevert("nothing to claim");
         pm.claim(0);
