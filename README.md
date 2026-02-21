@@ -281,13 +281,4 @@ forge test -vv
 
 ---
 
-## Judging Checklist
 
-- [x] Blockchain integration — Base Sepolia, 4 live verified contracts
-- [x] External API via CRE — 3 independent sources per market type
-- [x] Automated settlement — 2 CRE job specs covering price + events
-- [x] CLI simulation — 3 runnable demo scripts
-- [x] Clean README + demo flow — this document
-- [x] Verifiable on-chain — all TXs on Basescan
-- [x] INVALID/refund safety — demonstrated via football demo
-- [x] 22 tests passing — full coverage of both systems
