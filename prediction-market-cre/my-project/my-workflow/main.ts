@@ -1,24 +1,30 @@
-import { CronCapability, handler, Runner, type Runtime } from "@chainlink/cre-sdk";
+import { cre, Runner, type Runtime } from "@chainlink/cre-sdk";
+import { onHttpTrigger } from "./httpCallback";
+import { onLogTrigger } from "./logCallback";
 
 type Config = {
-  schedule: string;
-};
-
-const onCronTrigger = (runtime: Runtime<Config>): string => {
-  runtime.log("Hello world! Workflow triggered.");
-  return "Hello world!";
+  geminiModel: string;
+  evms: Array<{
+    marketAddress: string;
+    chainSelectorName: string;
+    gasLimit: string;
+  }>;
 };
 
 const initWorkflow = (config: Config) => {
-  const cron = new CronCapability();
+  const httpCapability = new cre.capabilities.HTTPCapability();
+  const httpTrigger = httpCapability.trigger({});
+
+  const evmLogTrigger = new cre.capabilities.EVMLogTrigger({
+    chainSelectorName: config.evms[0].chainSelectorName,
+    isTestnet: true,
+    address: config.evms[0].marketAddress,
+    eventSignature: "SettlementRequested(uint256,string)",
+  });
 
   return [
-    handler(
-      cron.trigger(
-        { schedule: config.schedule }
-      ), 
-      onCronTrigger
-    ),
+    cre.handler(httpTrigger, onHttpTrigger),
+    cre.handler(evmLogTrigger, onLogTrigger),
   ];
 };
 
@@ -26,3 +32,5 @@ export async function main() {
   const runner = await Runner.newRunner<Config>();
   await runner.run(initWorkflow);
 }
+
+main();
