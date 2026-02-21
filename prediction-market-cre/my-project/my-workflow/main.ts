@@ -15,7 +15,8 @@ const initWorkflow = (config: Config) => {
   const httpCapability = new cre.capabilities.HTTPCapability();
   const httpTrigger = httpCapability.trigger({});
 
-  const evmLogTrigger = new cre.capabilities.EVMLogTrigger({
+  const evmClient = new cre.capabilities.EVMClient();
+  const evmLogTrigger = evmClient.trigger({
     chainSelectorName: config.evms[0].chainSelectorName,
     isTestnet: true,
     address: config.evms[0].marketAddress,

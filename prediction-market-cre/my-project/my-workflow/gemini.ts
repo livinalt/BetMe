@@ -1,3 +1,5 @@
+// prediction-market/my-workflow/gemini.ts
+
 import {
   cre,
   ok,
@@ -6,6 +8,7 @@ import {
   type HTTPSendRequester,
 } from "@chainlink/cre-sdk";
 
+// Inline types
 type Config = {
   geminiModel: string;
   evms: Array<{
@@ -16,13 +19,21 @@ type Config = {
 };
 
 interface GeminiData {
-  system_instruction: { parts: Array<{ text: string }> };
+  system_instruction: {
+    parts: Array<{ text: string }>;
+  };
   tools: Array<{ google_search: object }>;
-  contents: Array<{ parts: Array<{ text: string }> }>;
+  contents: Array<{
+    parts: Array<{ text: string }>;
+  }>;
 }
 
 interface GeminiApiResponse {
-  candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+  candidates?: Array<{
+    content?: {
+      parts?: Array<{ text?: string }>;
+    };
+  }>;
   responseId?: string;
 }
 
@@ -55,6 +66,9 @@ DECISION RULES:
 - "YES" = the event happened as stated.
 - "NO" = the event did not happen as stated.
 - Do not speculate. Use only objective, verifiable information.
+
+REMINDER:
+- Your ENTIRE response must be ONLY the JSON object described above.
 `;
 
 const USER_PROMPT = `Determine the outcome of this market based on factual information and return the result in this JSON format:
@@ -70,13 +84,15 @@ export function askGemini(runtime: Runtime<Config>, question: string): GeminiRes
   const geminiApiKey = runtime.getSecret({ id: "GEMINI_API_KEY" }).result();
   const httpClient = new cre.capabilities.HTTPClient();
 
-  const result = httpClient.sendRequest(
-    runtime,
-    buildGeminiRequest(question, geminiApiKey.value),
-    consensusIdenticalAggregation<GeminiResponse>()
-  )(runtime.config).result();
+  const result = httpClient
+    .sendRequest(
+      runtime,
+      buildGeminiRequest(question, geminiApiKey.value),
+      consensusIdenticalAggregation<GeminiResponse>()
+    )(runtime.config)
+    .result();
 
-  runtime.log(`[Gemini] Response: ${result.geminiResponse}`);
+  runtime.log(`[Gemini] Response received: ${result.geminiResponse}`);
   return result;
 }
 
@@ -84,9 +100,19 @@ const buildGeminiRequest =
   (question: string, apiKey: string) =>
   (sendRequester: HTTPSendRequester, config: Config): GeminiResponse => {
     const requestData: GeminiData = {
-      system_instruction: { parts: [{ text: SYSTEM_PROMPT }] },
-      tools: [{ google_search: {} }],
-      contents: [{ parts: [{ text: USER_PROMPT + question }] }],
+      system_instruction: {
+        parts: [{ text: SYSTEM_PROMPT }],
+      },
+      tools: [
+        {
+          google_search: {},
+        },
+      ],
+      contents: [
+        {
+          parts: [{ text: USER_PROMPT + question }],
+        },
+      ],
     };
 
     const bodyBytes = new TextEncoder().encode(JSON.stringify(requestData));
@@ -100,7 +126,10 @@ const buildGeminiRequest =
         "Content-Type": "application/json",
         "x-goog-api-key": apiKey,
       },
-      cacheSettings: { store: true, maxAge: "60s" },
+      cacheSettings: {
+        store: true,
+        maxAge: '60s',
+      },
     };
 
     const resp = sendRequester.sendRequest(req).result();
@@ -113,7 +142,9 @@ const buildGeminiRequest =
     const apiResponse = JSON.parse(bodyText) as GeminiApiResponse;
     const text = apiResponse?.candidates?.[0]?.content?.parts?.[0]?.text;
 
-    if (!text) throw new Error("Malformed Gemini response: missing text");
+    if (!text) {
+      throw new Error("Malformed Gemini response: missing text");
+    }
 
     return {
       statusCode: resp.statusCode,
