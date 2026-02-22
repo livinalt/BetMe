@@ -1,6 +1,5 @@
 [profile.default]
 src = "src"
-dotenv = ".env"
 out = "out"
 libs = ["lib"]
 remappings = [
