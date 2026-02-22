@@ -1,0 +1,18 @@
+# Node / frontend
+node_modules/
+.next/
+dist/
+build/
+.env
+.env.local
+*.log
+
+# Hardhat / Foundry / contracts dev files
+artifacts/
+cache/
+out/
+broadcast/
+
+# Misc
+.DS_Store
+Thumbs.db
