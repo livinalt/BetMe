@@ -116,7 +116,7 @@ export function onLogTrigger(runtime: Runtime<Config>, log: EVMLog): string {
     const readResult = evmClient.callContract(runtime, {
       call: encodeCallMsg({
         from: zeroAddress,
-        to: evmConfig.marketAddress,
+        to: evmConfig.marketAddress as `0x${string}`,
         data: callData,
       }),
     }).result();
@@ -125,7 +125,7 @@ export function onLogTrigger(runtime: Runtime<Config>, log: EVMLog): string {
       abi: GET_MARKET_ABI,
       functionName: "getMarket",
       data: bytesToHex(readResult.data),
-    }) as Market;
+    }) as unknown as Market;
 
     runtime.log(`[Step 2] Settled: ${market.settled} | Yes: ${market.totalYesPool} | No: ${market.totalNoPool}`);
 
@@ -170,7 +170,7 @@ export function onLogTrigger(runtime: Runtime<Config>, log: EVMLog): string {
     }).result();
 
     const writeResult = evmClient.writeReport(runtime, {
-      receiver: evmConfig.marketAddress,
+      receiver: evmConfig.marketAddress as `0x${string}`,
       report: reportResponse,
       gasConfig: { gasLimit: evmConfig.gasLimit },
     }).result();
